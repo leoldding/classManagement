@@ -1,0 +1,51 @@
+version: '3.9'
+services:
+  postgres:
+    restart: always
+    image: postgres:latest
+    environment:
+      - POSTGRES_PASSWORD=postgres_password
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 30s
+      timeout: 2s
+      retries: 3
+  backend:
+    restart: always
+    build:
+      dockerfile: Dockerfile.dev
+      context: ./backend
+    volumes:
+      - ./backend:/app
+    command: reflex -r "\.go$$" -s -- sh -c "go run ./"
+    healthcheck:
+      test: curl --fail http://localhost:8080/ping || exit 1
+      interval: 30s
+      timeout: 2s
+      retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+  frontend:
+    restart: always
+    build:
+      dockerfile: Dockerfile.dev
+      context: ./frontend
+    volumes:
+      - /app/node_modules
+      - ./frontend:/app
+    environment:
+      - WDS_SOCKET_PORT=0
+    depends_on:
+      backend:
+        condition: service_healthy
+  nginx:
+    restart: always
+    build:
+      dockerfile: Dockerfile.dev
+      context: ./nginx
+    ports:
+      - '3000:80'
+    depends_on:
+      backend:
+        condition: service_healthy
